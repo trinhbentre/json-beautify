@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface-900 text-text-primary antialiased;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-3 py-1.5 rounded-md text-sm font-medium transition-colors duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-accent hover:bg-accent-hover text-surface-900;
+  }
+  .btn-secondary {
+    @apply btn bg-surface-700 hover:bg-surface-600 text-text-primary border border-surface-600;
+  }
+  .btn-danger {
+    @apply btn bg-surface-700 hover:bg-danger/20 text-danger border border-surface-600;
+  }
+}
