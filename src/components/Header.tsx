@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import type { HistoryEntry } from '../hooks/useHistory'
 import { HistoryDropdown } from './HistoryDropdown'
 
@@ -17,6 +18,8 @@ interface HeaderProps {
   onRestore: (content: string) => void
   onRemove: (id: string) => void
   onClearHistory: () => void
+  onOpenFile: (file: File) => void
+  onLoadUrl: (url: string) => void
 }
 
 const indentOptions: { label: string; value: Indent }[] = [
@@ -31,7 +34,15 @@ export function Header({
   onFormat, onMinify, onRepair, repairDisabled,
   onClear,
   historyEntries, onRestore, onRemove, onClearHistory,
+  onOpenFile, onLoadUrl,
 }: HeaderProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleUrlClick = () => {
+    const url = window.prompt('Enter JSON URL:')
+    if (url?.trim()) onLoadUrl(url.trim())
+  }
+
   return (
     <header className="h-11 flex items-center px-4 gap-3 border-b border-surface-700 bg-surface-800 shadow-[0_1px_8px_rgba(0,0,0,0.4)] shrink-0">
       {/* Left — brand */}
@@ -72,6 +83,31 @@ export function Header({
             {label}
           </button>
         ))}
+
+        <div className="w-px h-4 bg-surface-600 mx-0.5 flex-shrink-0" />
+
+        {/* File input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,.jsonl,.geojson,application/json"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) onOpenFile(f) }}
+        />
+        <button
+          className="btn-secondary"
+          title="Open JSON file"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          📂 Open
+        </button>
+        <button
+          className="btn-secondary"
+          title="Load JSON from URL"
+          onClick={handleUrlClick}
+        >
+          🌐 URL
+        </button>
       </div>
 
       {/* Right — sort / history / clear */}

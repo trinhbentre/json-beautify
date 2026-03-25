@@ -3,18 +3,24 @@ import { jsonrepair } from 'jsonrepair'
 import { Header } from './components/Header'
 import { CodeEditor } from './components/CodeEditor'
 import { OutputEditor } from './components/OutputEditor'
+import { VirtualTextViewer } from './components/VirtualTextViewer'
 import { TreeView } from './components/TreeView'
 import { ConvertPanel } from './components/ConvertPanel'
+import { FileDropZone } from './components/FileDropZone'
+import { ParseProgress } from './components/ParseProgress'
+import { JQSearchPanel } from './components/JQSearchPanel'
 import { useHistory } from './hooks/useHistory'
+import * as parserService from './lib/parserService'
+import type { ParseResult } from './lib/parserService'
 
 type Status = 'idle' | 'valid' | 'error'
 type Indent = 2 | 4 | 'tab'
 
+const LARGE_CODE_THRESHOLD = 20 * 1024 * 1024 // 20MB
+
 function parseLineCol(message: string): string {
-  // Chrome/Node: "Unexpected token ... at line L column C"
   const lineCol = message.match(/line (\d+) column (\d+)/i)
   if (lineCol) return `Line ${lineCol[1]}, Col ${lineCol[2]}: `
-  // Firefox style: "at line N col N"
   const pos = message.match(/at line (\d+) col(?:umn)? (\d+)/i)
   if (pos) return `Line ${pos[1]}, Col ${pos[2]}: `
   return ''
@@ -63,7 +69,13 @@ function minifyJSON(raw: string): { result: string; status: Status; error?: stri
   }
 }
 
+function formatBytes(n: number): string {
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export default function App() {
+  // Text mode state
   const [input, setInput] = useState('')
   const [output, setOutput] = useState('')
   const [status, setStatus] = useState<Status>('idle')
@@ -72,12 +84,36 @@ export default function App() {
   const [indent, setIndent] = useState<Indent>(2)
   const [sortKeys, setSortKeys] = useState(false)
   const [viewTab, setViewTab] = useState<'code' | 'tree' | 'convert'>('code')
+
+  // File mode state
+  const [fileMode, setFileMode] = useState(false)
+  const [fileInfo, setFileInfo] = useState<{ name: string; size: number } | null>(null)
+  const [parsing, setParsing] = useState(false)
+  const [parsePercent, setParsePercent] = useState(0)
+  const [parseBytesRead, setParseBytesRead] = useState(0)
+  const [parseStartTime, setParseStartTime] = useState(0)
+  const [parseResult, setParseResult] = useState<ParseResult | null>(null)
+  const [parseError, setParseError] = useState<string | null>(null)
+
   const { entries: historyEntries, push: pushHistory, remove: removeHistory, clear: clearHistory } = useHistory()
 
+  // parsedJson for Tree/Convert — works in both modes
   const parsedJson = useMemo(() => {
+    if (fileMode && parseResult) return parseResult.root
     if (!input.trim()) return null
     try { return JSON.parse(input) } catch { return null }
-  }, [input])
+  }, [fileMode, parseResult, input])
+
+  // Code output for file mode (skip if too large for Monaco)
+  const fileCodeOutput = useMemo(() => {
+    if (!fileMode || !parseResult) return ''
+    if (parseResult.sizeBytes > LARGE_CODE_THRESHOLD) return null // null = too large
+    try {
+      return JSON.stringify(parseResult.root, null, toIndentArg(indent))
+    } catch {
+      return ''
+    }
+  }, [fileMode, parseResult, indent])
 
   const handleFormat = useCallback(() => {
     const { result, status, error } = formatJSON(input, indent, sortKeys)
@@ -95,12 +131,13 @@ export default function App() {
   }, [input])
 
   const handleCopy = useCallback(() => {
-    if (!output) return
-    navigator.clipboard.writeText(output).then(() => {
+    const toCopy = fileMode ? fileCodeOutput ?? '' : output
+    if (!toCopy) return
+    navigator.clipboard.writeText(toCopy).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     })
-  }, [output])
+  }, [fileMode, fileCodeOutput, output])
 
   const handleRepair = useCallback(() => {
     if (!input.trim()) return
@@ -116,21 +153,104 @@ export default function App() {
   }, [input])
 
   const handleClear = useCallback(() => {
+    if (fileMode) {
+      setFileMode(false)
+      setFileInfo(null)
+      setParseResult(null)
+      setParseError(null)
+    }
     setInput('')
     setOutput('')
     setStatus('idle')
     setError('')
+  }, [fileMode])
+
+  const handleOpenFile = useCallback(async (file: File) => {
+    setFileMode(true)
+    setFileInfo({ name: file.name, size: file.size })
+    setParsing(true)
+    setParsePercent(0)
+    setParseBytesRead(0)
+    setParseStartTime(Date.now())
+    setParseResult(null)
+    setParseError(null)
+    setStatus('idle')
+    try {
+      const result = await parserService.parseFile(file, (percent, bytesRead) => {
+        setParsePercent(percent)
+        setParseBytesRead(bytesRead)
+      })
+      setParseResult(result)
+      setStatus('valid')
+    } catch (e) {
+      if ((e as Error).message !== 'Aborted') {
+        setParseError((e as Error).message)
+        setStatus('error')
+      }
+    } finally {
+      setParsing(false)
+    }
   }, [])
 
+  const handleLoadUrl = useCallback(async (url: string) => {
+    setFileMode(true)
+    setFileInfo(null)
+    setParsing(true)
+    setParsePercent(0)
+    setParseBytesRead(0)
+    setParseStartTime(Date.now())
+    setParseResult(null)
+    setParseError(null)
+    setStatus('idle')
+    try {
+      const result = await parserService.parseUrl(url, (percent, bytesRead) => {
+        setParsePercent(percent)
+        setParseBytesRead(bytesRead)
+      })
+      setParseResult(result)
+      try {
+        const urlPath = new URL(url).pathname
+        const name = urlPath.split('/').pop() || 'data.json'
+        setFileInfo({ name, size: result.sizeBytes })
+      } catch {
+        setFileInfo({ name: 'data.json', size: result.sizeBytes })
+      }
+      setStatus('valid')
+    } catch (e) {
+      if ((e as Error).message !== 'Aborted') {
+        setParseError((e as Error).message)
+        setStatus('error')
+      }
+    } finally {
+      setParsing(false)
+    }
+  }, [])
+
+  const handleCancelParse = useCallback(() => {
+    parserService.abortAll()
+    setParsing(false)
+    setFileMode(false)
+    setFileInfo(null)
+  }, [])
+
+  // Status bar output
   const statusColor =
     status === 'valid' ? 'text-success' :
     status === 'error' ? 'text-danger' :
     'text-text-muted'
 
-  const statusLabel =
-    status === 'valid' ? '✓ Valid JSON' :
-    status === 'error' ? `✗ ${error}` :
-    'Paste JSON and click Format or Minify'
+  const statusLabel = fileMode
+    ? status === 'valid' && parseResult
+      ? `✓ ${parseResult.nodeCount.toLocaleString()} nodes · parsed in ${parseResult.parseTimeMs.toFixed(0)}ms`
+      : status === 'error'
+        ? `✗ ${parseError}`
+        : 'Loading…'
+    : status === 'valid' ? '✓ Valid JSON'
+    : status === 'error' ? `✗ ${error}`
+    : 'Paste JSON and click Format or Minify'
+
+  const codeOutput = fileMode ? (fileCodeOutput ?? '') : output
+  const canCopy = fileMode ? (fileCodeOutput != null && fileCodeOutput !== '') : !!output
 
   return (
     <div className="h-screen overflow-hidden flex flex-col bg-surface-900">
@@ -142,26 +262,65 @@ export default function App() {
         onFormat={handleFormat}
         onMinify={handleMinify}
         onRepair={handleRepair}
-        repairDisabled={!input.trim()}
+        repairDisabled={fileMode || !input.trim()}
         onClear={handleClear}
         historyEntries={historyEntries}
-        onRestore={(content) => { setInput(content); setOutput(''); setStatus('idle'); setError('') }}
+        onRestore={(content) => {
+          setFileMode(false)
+          setFileInfo(null)
+          setParseResult(null)
+          setParseError(null)
+          setInput(content)
+          setOutput('')
+          setStatus('idle')
+          setError('')
+        }}
         onRemove={removeHistory}
         onClearHistory={clearHistory}
+        onOpenFile={handleOpenFile}
+        onLoadUrl={handleLoadUrl}
       />
+
+      {/* Parse progress bar */}
+      {parsing && (
+        <ParseProgress
+          percent={parsePercent}
+          bytesRead={parseBytesRead}
+          elapsedMs={Date.now() - parseStartTime}
+          onCancel={handleCancelParse}
+        />
+      )}
 
       <main className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-2 divide-x divide-surface-700">
         {/* Left — Input pane */}
         <div className="flex flex-col overflow-hidden h-[50vh] lg:h-auto">
           <div className="pane-header">
             <span className="text-text-muted font-semibold tracking-widest uppercase text-[10px]">Input</span>
+            {fileMode && (
+              <button
+                className="ml-auto text-xs text-text-muted hover:text-text-secondary"
+                onClick={handleClear}
+                title="Close file — back to text mode"
+              >
+                ✕ Close file
+              </button>
+            )}
           </div>
           <div className="flex-1 overflow-hidden">
-            <CodeEditor value={input} onChange={setInput} />
+            {fileMode ? (
+              <FileDropZone onFile={handleOpenFile} onUrl={handleLoadUrl} fileInfo={fileInfo} />
+            ) : (
+              <CodeEditor value={input} onChange={setInput} />
+            )}
           </div>
           <div className="status-bar">
             <span className={statusColor}>{statusLabel}</span>
-            <span className="text-text-muted ml-auto">{input.length.toLocaleString()} chars</span>
+            {!fileMode && (
+              <span className="text-text-muted ml-auto">{input.length.toLocaleString()} chars</span>
+            )}
+            {fileMode && fileInfo && (
+              <span className="text-text-muted ml-auto">{formatBytes(fileInfo.size)}</span>
+            )}
           </div>
         </div>
 
@@ -187,17 +346,33 @@ export default function App() {
               <button
                 className="btn-secondary ml-auto"
                 onClick={handleCopy}
-                disabled={!output}
+                disabled={!canCopy}
               >
                 {copied ? '✓ Copied' : 'Copy'}
               </button>
             )}
           </div>
           <div className="flex-1 overflow-hidden flex flex-col">
-            {viewTab === 'code' && <OutputEditor value={output} />}
+            {viewTab === 'code' && (
+              fileMode && fileCodeOutput === null ? (
+                <div className="h-full flex items-center justify-center text-text-muted text-sm p-6 text-center">
+                  <div>
+                    <p className="text-base font-medium mb-1">File too large for code view</p>
+                    <p className="text-xs opacity-70">Switch to <strong>Tree</strong> or <strong>Convert</strong> tab to inspect this file.</p>
+                  </div>
+                </div>
+              ) : fileMode && parseResult && parseResult.sizeBytes > LARGE_CODE_THRESHOLD / 2 ? (
+                <VirtualTextViewer text={codeOutput} />
+              ) : (
+                <OutputEditor value={codeOutput} />
+              )
+            )}
             {viewTab === 'tree' && (
-              <div className="h-full overflow-y-auto p-3">
+              <div className="h-full overflow-hidden p-3 flex flex-col gap-3">
                 <TreeView data={parsedJson} />
+                <div className="shrink-0 border-t border-surface-700 pt-3">
+                  <JQSearchPanel data={parsedJson} />
+                </div>
               </div>
             )}
             {viewTab === 'convert' && (

@@ -10,6 +10,9 @@
   },
   "dependencies": {
     "@monaco-editor/react": "4.7.0",
+    "@streamparser/json": "0.0.22",
+    "@tanstack/react-virtual": "3.13.23",
+    "jq-web": "0.6.2",
     "js-yaml": "4.1.1",
     "jsonpath-plus": "10.4.0",
     "jsonrepair": "3.13.3",
