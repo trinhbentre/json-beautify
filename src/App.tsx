@@ -5,7 +5,6 @@ import { CodeEditor } from './components/CodeEditor'
 import { OutputEditor } from './components/OutputEditor'
 import { TreeView } from './components/TreeView'
 import { ConvertPanel } from './components/ConvertPanel'
-import { HistoryDropdown } from './components/HistoryDropdown'
 import { useHistory } from './hooks/useHistory'
 
 type Status = 'idle' | 'valid' | 'error'
@@ -133,121 +132,79 @@ export default function App() {
     status === 'error' ? `✗ ${error}` :
     'Paste JSON and click Format or Minify'
 
-  const indentOptions: { label: string; value: Indent }[] = [
-    { label: '2', value: 2 },
-    { label: '4', value: 4 },
-    { label: 'Tab', value: 'tab' },
-  ]
-
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
+    <div className="h-screen overflow-hidden flex flex-col bg-surface-900">
+      <Header
+        indent={indent}
+        onIndentChange={setIndent}
+        sortKeys={sortKeys}
+        onToggleSortKeys={() => setSortKeys(s => !s)}
+        onFormat={handleFormat}
+        onMinify={handleMinify}
+        onRepair={handleRepair}
+        repairDisabled={!input.trim()}
+        onClear={handleClear}
+        historyEntries={historyEntries}
+        onRestore={(content) => { setInput(content); setOutput(''); setStatus('idle'); setError('') }}
+        onRemove={removeHistory}
+        onClearHistory={clearHistory}
+      />
 
-      <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-6 flex flex-col gap-4">
-        {/* Toolbar */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button className="btn-primary" onClick={handleFormat}>Format</button>
-          <button className="btn-secondary" onClick={handleMinify}>Minify</button>
-          <button
-            className="btn-secondary"
-            onClick={handleRepair}
-            disabled={!input.trim()}
-            title="Auto-fix trailing commas, single quotes, missing quotes on keys"
-          >
-            Repair
-          </button>
-
-          {/* Indent */}
-          <div className="flex items-center gap-1.5 ml-2">
-            <span className="text-text-muted text-xs">Indent:</span>
-            {indentOptions.map(({ label, value }) => (
-              <button
-                key={label}
-                onClick={() => setIndent(value)}
-                className={`btn text-xs px-2 py-1 ${indent === value ? 'bg-accent text-surface-900' : 'bg-surface-700 text-text-secondary border border-surface-600 hover:bg-surface-600'}`}
-              >
-                {label}
-              </button>
-            ))}
+      <main className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-2 divide-x divide-surface-700">
+        {/* Left — Input pane */}
+        <div className="flex flex-col overflow-hidden h-[50vh] lg:h-auto">
+          <div className="pane-header">
+            <span className="text-text-muted font-semibold tracking-widest uppercase text-[10px]">Input</span>
           </div>
-
-          {/* Sort Keys */}
-          <button
-            onClick={() => setSortKeys(s => !s)}
-            title="Sort object keys alphabetically"
-            className={`btn text-xs px-2 py-1 ml-1 ${sortKeys ? 'bg-accent text-surface-900' : 'bg-surface-700 text-text-secondary border border-surface-600 hover:bg-surface-600'}`}
-          >
-            Sort Keys
-          </button>
-
-          {/* Actions */}
-          <div className="flex items-center gap-2 ml-auto">
-            <HistoryDropdown
-              entries={historyEntries}
-              onRestore={(content) => { setInput(content); setOutput(''); setStatus('idle'); setError('') }}
-              onRemove={removeHistory}
-              onClearAll={clearHistory}
-            />
-            <button className="btn-danger" onClick={handleClear}>Clear</button>
+          <div className="flex-1 overflow-hidden">
+            <CodeEditor value={input} onChange={setInput} />
+          </div>
+          <div className="status-bar">
+            <span className={statusColor}>{statusLabel}</span>
+            <span className="text-text-muted ml-auto">{input.length.toLocaleString()} chars</span>
           </div>
         </div>
 
-        {/* Status */}
-        <p className={`text-xs font-mono ${statusColor} min-h-[1rem]`}>{statusLabel}</p>
-
-        {/* Editor panes */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-text-muted text-xs uppercase tracking-wider">Input</label>
-            <div className="flex-1 min-h-[500px] rounded-lg overflow-hidden border border-surface-700 focus-within:border-accent/50">
-              <CodeEditor value={input} onChange={setInput} />
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            {/* View tab bar */}
-            <div className="flex items-center gap-2">
-              <div className="flex gap-0.5">
-                {([['code', 'Code'], ['tree', 'Tree'], ['convert', 'Convert']] as const).map(([id, label]) => (
-                  <button
-                    key={id}
-                    onClick={() => setViewTab(id)}
-                    className={`text-xs px-3 py-1 rounded font-medium transition-colors ${
-                      viewTab === id
-                        ? 'bg-surface-700 text-text-primary border border-surface-600'
-                        : 'text-text-muted hover:text-text-secondary'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {viewTab === 'code' && (
+        {/* Right — Output pane */}
+        <div className="flex flex-col overflow-hidden h-[50vh] lg:h-auto">
+          <div className="pane-header">
+            <div className="flex gap-0.5 border-r border-surface-700 pr-2 mr-1">
+              {([['code', 'Code'], ['tree', 'Tree'], ['convert', 'Convert']] as const).map(([id, label]) => (
                 <button
-                  className="btn-secondary text-xs ml-auto"
-                  onClick={handleCopy}
-                  disabled={!output}
+                  key={id}
+                  onClick={() => setViewTab(id)}
+                  className={`text-xs px-2.5 py-0.5 rounded font-medium transition-colors ${
+                    viewTab === id
+                      ? 'bg-surface-700 text-text-primary border border-surface-600'
+                      : 'text-text-muted hover:text-text-secondary'
+                  }`}
                 >
-                  {copied ? '✓ Copied' : 'Copy'}
+                  {label}
                 </button>
-              )}
-              {viewTab === 'tree' && <span className="ml-auto" />}
+              ))}
             </div>
-
-            {/* Content */}
-            <div className="flex-1 min-h-[500px] rounded-lg overflow-hidden border border-surface-700 flex flex-col bg-surface-800">
-              {viewTab === 'code' && <OutputEditor value={output} />}
-              {viewTab === 'tree' && (
-                <div className="flex-1 flex flex-col p-3 min-h-0">
-                  <TreeView data={parsedJson} />
-                </div>
-              )}
-              {viewTab === 'convert' && (
-                <div className="flex-1 flex flex-col p-3 min-h-0">
-                  <ConvertPanel data={parsedJson} />
-                </div>
-              )}
-            </div>
+            {viewTab === 'code' && (
+              <button
+                className="btn-secondary ml-auto"
+                onClick={handleCopy}
+                disabled={!output}
+              >
+                {copied ? '✓ Copied' : 'Copy'}
+              </button>
+            )}
+          </div>
+          <div className="flex-1 overflow-hidden flex flex-col">
+            {viewTab === 'code' && <OutputEditor value={output} />}
+            {viewTab === 'tree' && (
+              <div className="h-full overflow-y-auto p-3">
+                <TreeView data={parsedJson} />
+              </div>
+            )}
+            {viewTab === 'convert' && (
+              <div className="h-full overflow-hidden p-3 flex flex-col">
+                <ConvertPanel data={parsedJson} />
+              </div>
+            )}
           </div>
         </div>
       </main>

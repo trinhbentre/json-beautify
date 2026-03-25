@@ -4,13 +4,14 @@
 
 @layer base {
   body {
-    @apply bg-surface-900 text-text-primary antialiased;
+    @apply bg-surface-900 text-text-primary antialiased overflow-hidden;
+    height: 100vh;
   }
 }
 
 @layer components {
   .btn {
-    @apply px-3 py-1.5 rounded-md text-sm font-medium transition-colors duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed;
+    @apply px-2.5 py-1 rounded text-xs font-medium tracking-wide transition-colors duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed;
   }
   .btn-primary {
     @apply btn bg-accent hover:bg-accent-hover text-surface-900;
@@ -20,5 +21,11 @@
   }
   .btn-danger {
     @apply btn bg-surface-700 hover:bg-danger/20 text-danger border border-surface-600;
+  }
+  .pane-header {
+    @apply flex items-center gap-2 px-3 py-1.5 bg-surface-850 border-b border-surface-700 text-xs h-9 shrink-0;
+  }
+  .status-bar {
+    @apply px-3 py-1 border-t border-surface-700 text-xs font-mono flex items-center gap-3 h-7 shrink-0 bg-surface-900;
   }
 }
