@@ -9,10 +9,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@monaco-editor/react": "4.7.0",
+    "js-yaml": "4.1.1",
+    "jsonpath-plus": "10.4.0",
+    "jsonrepair": "3.13.3",
+    "monaco-editor": "0.55.1",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@types/js-yaml": "4.0.9",
     "@types/node": "25.5.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",

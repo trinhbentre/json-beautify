@@ -10,6 +10,7 @@ export function Header() {
         </a>
         <span className="text-surface-600">|</span>
         <span className="text-text-primary text-sm font-semibold">JSON Beautify</span>
+        <span className="ml-auto text-xs text-success/70 border border-success/20 rounded px-2 py-0.5">🔒 100% Client-side</span>
       </div>
     </header>
   )
