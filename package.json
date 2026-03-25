@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@monaco-editor/react": "4.7.0",
+    "ajv": "8.18.0",
+    "ajv-formats": "3.0.1",
     "@streamparser/json": "0.0.22",
     "@tanstack/react-virtual": "3.13.23",
     "jq-web": "0.6.2",

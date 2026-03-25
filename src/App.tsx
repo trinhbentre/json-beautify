@@ -18,12 +18,31 @@ type Indent = 2 | 4 | 'tab'
 
 const LARGE_CODE_THRESHOLD = 20 * 1024 * 1024 // 20MB
 
-function parseLineCol(message: string): string {
+interface JsonError {
+  location: string
+  friendly: string
+  hint?: string
+}
+
+function parseJsonError(message: string): JsonError {
   const lineCol = message.match(/line (\d+) column (\d+)/i)
-  if (lineCol) return `Line ${lineCol[1]}, Col ${lineCol[2]}: `
-  const pos = message.match(/at line (\d+) col(?:umn)? (\d+)/i)
-  if (pos) return `Line ${pos[1]}, Col ${pos[2]}: `
-  return ''
+  const atPos = message.match(/at line (\d+) col(?:umn)? (\d+)/i)
+  const location = lineCol
+    ? `Line ${lineCol[1]}, Col ${lineCol[2]}`
+    : atPos ? `Line ${atPos[1]}, Col ${atPos[2]}` : ''
+
+  if (/unexpected end of json input/i.test(message))
+    return { location, friendly: 'JSON is incomplete — looks like it was cut off', hint: 'Check that you copied the full content' }
+  if (/property name/i.test(message))
+    return { location, friendly: 'Property names must be wrapped in double quotes', hint: 'Try Repair to auto-fix unquoted keys' }
+  if (/unexpected token ','|Expected.*after.*value/i.test(message))
+    return { location, friendly: 'Trailing comma — the last item in an object or array cannot end with a comma', hint: 'Try Repair to remove it automatically' }
+  if (/unexpected token/i.test(message)) {
+    const tok = message.match(/Unexpected token '?([^'\s]+)'?/i)
+    const charPart = tok ? ` '${tok[1]}'` : ''
+    return { location, friendly: `Unexpected character${charPart} in JSON`, hint: 'Common causes: trailing commas, unquoted property names, or single quotes' }
+  }
+  return { location, friendly: message, hint: undefined }
 }
 
 function sortKeysDeep(value: unknown): unknown {
@@ -54,7 +73,7 @@ function formatJSON(
     return { result: JSON.stringify(parsed, null, toIndentArg(indent)), status: 'valid' }
   } catch (e) {
     const msg = (e as Error).message
-    return { result: '', status: 'error', error: parseLineCol(msg) + msg }
+    return { result: '', status: 'error', error: msg }
   }
 }
 
@@ -65,7 +84,7 @@ function minifyJSON(raw: string): { result: string; status: Status; error?: stri
     return { result: JSON.stringify(parsed), status: 'valid' }
   } catch (e) {
     const msg = (e as Error).message
-    return { result: '', status: 'error', error: parseLineCol(msg) + msg }
+    return { result: '', status: 'error', error: msg }
   }
 }
 
@@ -239,6 +258,8 @@ export default function App() {
     status === 'error' ? 'text-danger' :
     'text-text-muted'
 
+  const jsonError = !fileMode && status === 'error' && error ? parseJsonError(error) : null
+
   const statusLabel = fileMode
     ? status === 'valid' && parseResult
       ? `✓ ${parseResult.nodeCount.toLocaleString()} nodes · parsed in ${parseResult.parseTimeMs.toFixed(0)}ms`
@@ -246,7 +267,7 @@ export default function App() {
         ? `✗ ${parseError}`
         : 'Loading…'
     : status === 'valid' ? '✓ Valid JSON'
-    : status === 'error' ? `✗ ${error}`
+    : status === 'error' ? `✗ ${jsonError?.location || 'Syntax error'}`
     : 'Paste JSON and click Format or Minify'
 
   const codeOutput = fileMode ? (fileCodeOutput ?? '') : output
@@ -313,6 +334,14 @@ export default function App() {
               <CodeEditor value={input} onChange={setInput} />
             )}
           </div>
+          {jsonError && (
+            <div className="shrink-0 border-t border-danger/30 bg-danger/8 px-3 py-2 flex flex-col gap-1">
+              <p className="text-xs text-danger font-medium">{jsonError.friendly}</p>
+              {jsonError.hint && (
+                <p className="text-xs text-warning/80">💡 {jsonError.hint}</p>
+              )}
+            </div>
+          )}
           <div className="status-bar">
             <span className={statusColor}>{statusLabel}</span>
             {!fileMode && (
@@ -380,6 +409,7 @@ export default function App() {
                 <ConvertPanel data={parsedJson} />
               </div>
             )}
+
           </div>
         </div>
       </main>

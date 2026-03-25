@@ -13,12 +13,15 @@ interface NodeProps {
   nodeKey: string | number | null
   value: unknown
   depth: number
+  path: string
+  highlightedPaths: Set<string>
 }
 
-function TreeNode({ nodeKey, value, depth }: NodeProps) {
+function TreeNode({ nodeKey, value, depth, path, highlightedPaths }: NodeProps) {
   const isArr = Array.isArray(value)
   const isObj = !isArr && value !== null && typeof value === 'object'
   const isCollapsible = isArr || isObj
+  const isHighlighted = path !== '' && highlightedPaths.has(path)
   const [open, setOpen] = useState(depth < 2)
 
   const pl = depth * 16
@@ -41,7 +44,9 @@ function TreeNode({ nodeKey, value, depth }: NodeProps) {
     if (count === 0) {
       return (
         <div
-          className="flex items-center gap-1 py-0.5 px-1 hover:bg-surface-700/40 rounded"
+          className={`flex items-center gap-1 py-0.5 px-1 rounded ${
+            isHighlighted ? 'bg-danger/15 border border-danger/30' : 'hover:bg-surface-700/40'
+          }`}
           style={{ paddingLeft: `${pl}px` }}
         >
           <span className="w-3" />
@@ -54,7 +59,9 @@ function TreeNode({ nodeKey, value, depth }: NodeProps) {
     return (
       <div>
         <button
-          className="w-full text-left flex items-center gap-1 py-0.5 px-1 hover:bg-surface-700/40 rounded cursor-pointer"
+          className={`w-full text-left flex items-center gap-1 py-0.5 px-1 rounded cursor-pointer ${
+            isHighlighted ? 'bg-danger/15 border border-danger/30' : 'hover:bg-surface-700/40'
+          }`}
           style={{ paddingLeft: `${pl}px` }}
           onClick={() => setOpen(v => !v)}
         >
@@ -75,9 +82,24 @@ function TreeNode({ nodeKey, value, depth }: NodeProps) {
 
         {open && (
           <>
-            {entries.map(([k, v]) => (
-              <TreeNode key={k} nodeKey={isArr ? Number(k) : k} value={v} depth={depth + 1} />
-            ))}
+            {entries.map(([k, v]) => {
+              const childKey = isArr ? Number(k) : k
+              const childPath = path === ''
+                ? String(k)
+                : isArr
+                  ? `${path}[${k}]`
+                  : `${path}.${k}`
+              return (
+                <TreeNode
+                  key={k}
+                  nodeKey={childKey}
+                  value={v}
+                  depth={depth + 1}
+                  path={childPath}
+                  highlightedPaths={highlightedPaths}
+                />
+              )
+            })}
             <div
               className="py-0.5 px-1 text-text-muted"
               style={{ paddingLeft: `${(depth + 1) * 16}px` }}
@@ -130,7 +152,9 @@ function TreeNode({ nodeKey, value, depth }: NodeProps) {
 
   return (
     <div
-      className="flex items-start gap-1 py-0.5 px-1 hover:bg-surface-700/40 rounded"
+      className={`flex items-start gap-1 py-0.5 px-1 rounded ${
+        isHighlighted ? 'bg-danger/15 border border-danger/30' : 'hover:bg-surface-700/40'
+      }`}
       style={{ paddingLeft: `${pl + 16}px` }}
     >
       {keyEl}
@@ -141,9 +165,10 @@ function TreeNode({ nodeKey, value, depth }: NodeProps) {
 
 interface TreeViewProps {
   data: unknown
+  highlightedPaths?: Set<string>
 }
 
-export function TreeView({ data }: TreeViewProps) {
+export function TreeView({ data, highlightedPaths = new Set() }: TreeViewProps) {
   const [query, setQuery] = useState('')
 
   const { result: filteredResult, error: queryError } = useMemo(() => {
@@ -201,10 +226,10 @@ export function TreeView({ data }: TreeViewProps) {
           filteredResult.length === 0
             ? <p className="text-text-muted italic px-2 py-1">No results</p>
             : filteredResult.map((item, i) => (
-                <TreeNode key={i} nodeKey={i} value={item} depth={0} />
+                <TreeNode key={i} nodeKey={i} value={item} depth={0} path={String(i)} highlightedPaths={highlightedPaths} />
               ))
         ) : (
-          <TreeNode nodeKey={null} value={data} depth={0} />
+          <TreeNode nodeKey={null} value={data} depth={0} path="" highlightedPaths={highlightedPaths} />
         )}
       </div>
     </div>

@@ -1,52 +1,9 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import jsYaml from 'js-yaml'
 import { OutputEditor } from './OutputEditor'
+import { generateTypeScript, generateGo, generateJava, generateCSharp } from '../lib/modelGenerators'
 
-type ConvertTab = 'yaml' | 'typescript' | 'csv'
-
-// ── TypeScript Interface generator ─────────────────────────────────────────
-
-function toPascalCase(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1)
-}
-
-function inferType(value: unknown, name: string, interfaces: Map<string, string>): string {
-  if (value === null) return 'null'
-  if (typeof value === 'string') return 'string'
-  if (typeof value === 'number') return 'number'
-  if (typeof value === 'boolean') return 'boolean'
-  if (Array.isArray(value)) {
-    if (value.length === 0) return 'unknown[]'
-    const base = name.endsWith('s') ? name.slice(0, -1) : name
-    const itemType = inferType(value[0], toPascalCase(base) + 'Item', interfaces)
-    return `${itemType}[]`
-  }
-  if (typeof value === 'object') {
-    const interfaceName = toPascalCase(name)
-    const lines: string[] = [`interface ${interfaceName} {`]
-    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
-      const fieldType = inferType(val, toPascalCase(key), interfaces)
-      lines.push(`  ${key}: ${fieldType};`)
-    }
-    lines.push('}')
-    interfaces.set(interfaceName, lines.join('\n'))
-    return interfaceName
-  }
-  return 'unknown'
-}
-
-function jsonToTypeScript(value: unknown): string {
-  if (value === null) return '// Cannot generate interface for null'
-  if (typeof value !== 'object') return `// Cannot generate interface for primitive value`
-  const interfaces = new Map<string, string>()
-  if (Array.isArray(value)) {
-    if (value.length === 0) return 'type Root = unknown[]'
-    inferType(value[0], 'Item', interfaces)
-    return Array.from(interfaces.values()).join('\n\n') + '\n\ntype Root = Item[]'
-  }
-  inferType(value, 'Root', interfaces)
-  return Array.from(interfaces.values()).join('\n\n')
-}
+type ConvertTab = 'yaml' | 'typescript' | 'csv' | 'go' | 'java' | 'csharp'
 
 // ── CSV generator ───────────────────────────────────────────────────────────
 
@@ -94,38 +51,69 @@ interface ConvertPanelProps {
 
 export function ConvertPanel({ data }: ConvertPanelProps) {
   const [tab, setTab] = useState<ConvertTab>('yaml')
+  const [bsonTags, setBsonTags] = useState(false)
+  const [copied, setCopied] = useState(false)
 
-  const yamlOutput = (() => {
-    if (data === null || data === undefined) return ''
+  const hasData = data !== null && data !== undefined
+
+  const yamlOutput = useMemo(() => {
+    if (!hasData) return ''
     try { return jsYaml.dump(data, { lineWidth: -1 }) } catch { return '' }
-  })()
+  }, [data, hasData])
 
-  const tsOutput = data !== null && data !== undefined ? jsonToTypeScript(data) : ''
+  const tsOutput = useMemo(() => hasData ? generateTypeScript(data) : '', [data, hasData])
 
-  const csvResult = jsonToCSV(data)
+  const csvResult = useMemo(() => jsonToCSV(data), [data])
+
+  const goOutput = useMemo(() => hasData ? generateGo(data, 'Root', { bsonTags }) : '', [data, hasData, bsonTags])
+  const javaOutput = useMemo(() => hasData ? generateJava(data, 'Root') : '', [data, hasData])
+  const csharpOutput = useMemo(() => hasData ? generateCSharp(data, 'Root') : '', [data, hasData])
 
   const tabs: { id: ConvertTab; label: string }[] = [
     { id: 'yaml', label: 'YAML' },
     { id: 'typescript', label: 'TypeScript' },
     { id: 'csv', label: 'CSV' },
+    { id: 'go', label: 'Go' },
+    { id: 'java', label: 'Java' },
+    { id: 'csharp', label: 'C#' },
   ]
+
+  function getCurrentContent(): string {
+    if (tab === 'yaml') return yamlOutput
+    if (tab === 'typescript') return tsOutput
+    if (tab === 'csv') return csvResult.csv
+    if (tab === 'go') return goOutput
+    if (tab === 'java') return javaOutput
+    if (tab === 'csharp') return csharpOutput
+    return ''
+  }
 
   function handleDownload() {
     if (tab === 'yaml') downloadFile(yamlOutput, 'output.yaml', 'text/yaml')
     else if (tab === 'typescript') downloadFile(tsOutput, 'output.ts', 'text/typescript')
     else if (tab === 'csv' && csvResult.csv) downloadFile(csvResult.csv, 'output.csv', 'text/csv')
+    else if (tab === 'go') downloadFile(goOutput, 'output.go', 'text/plain')
+    else if (tab === 'java') downloadFile(javaOutput, 'Root.java', 'text/plain')
+    else if (tab === 'csharp') downloadFile(csharpOutput, 'Root.cs', 'text/plain')
   }
 
-  const hasContent =
-    tab === 'yaml' ? !!yamlOutput :
-    tab === 'typescript' ? !!tsOutput :
-    !!csvResult.csv
+  function handleCopy() {
+    const content = getCurrentContent()
+    if (!content) return
+    navigator.clipboard.writeText(content).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  const hasContent = !!getCurrentContent()
+  const isModelTab = tab === 'go' || tab === 'java' || tab === 'csharp' || tab === 'typescript'
 
   return (
     <div className="flex flex-col h-full gap-2">
-      {/* Sub-tabs + Download */}
-      <div className="flex items-center gap-1.5">
-        <div className="flex gap-0.5">
+      {/* Sub-tabs */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex gap-0.5 flex-wrap">
           {tabs.map(t => (
             <button
               key={t.id}
@@ -140,24 +128,46 @@ export function ConvertPanel({ data }: ConvertPanelProps) {
             </button>
           ))}
         </div>
-        <button
-          className="btn-secondary text-xs ml-auto"
-          onClick={handleDownload}
-          disabled={!hasContent}
-        >
-          ↓ Download
-        </button>
+        <div className="flex items-center gap-1.5 ml-auto">
+          {tab === 'go' && (
+            <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={bsonTags}
+                onChange={e => setBsonTags(e.target.checked)}
+                className="accent-accent"
+              />
+              BSON tags
+            </label>
+          )}
+          {isModelTab && (
+            <button
+              className="btn-secondary text-xs"
+              onClick={handleCopy}
+              disabled={!hasContent}
+            >
+              {copied ? '✓ Copied' : 'Copy'}
+            </button>
+          )}
+          <button
+            className="btn-secondary text-xs"
+            onClick={handleDownload}
+            disabled={!hasContent}
+          >
+            ↓ Download
+          </button>
+        </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 min-h-0 rounded overflow-hidden">
         {tab === 'yaml' && (
-          data !== null && data !== undefined
+          hasData
             ? <OutputEditor value={yamlOutput} language="yaml" />
             : <p className="flex items-center justify-center h-full text-text-muted text-sm">No valid JSON to convert</p>
         )}
         {tab === 'typescript' && (
-          data !== null && data !== undefined
+          hasData
             ? <OutputEditor value={tsOutput} language="typescript" />
             : <p className="flex items-center justify-center h-full text-text-muted text-sm">No valid JSON to convert</p>
         )}
@@ -165,6 +175,21 @@ export function ConvertPanel({ data }: ConvertPanelProps) {
           csvResult.error
             ? <p className="flex items-center justify-center h-full text-text-muted text-sm">{csvResult.error}</p>
             : <OutputEditor value={csvResult.csv} language="plaintext" />
+        )}
+        {tab === 'go' && (
+          hasData
+            ? <OutputEditor value={goOutput} language="plaintext" />
+            : <p className="flex items-center justify-center h-full text-text-muted text-sm">No valid JSON to convert</p>
+        )}
+        {tab === 'java' && (
+          hasData
+            ? <OutputEditor value={javaOutput} language="plaintext" />
+            : <p className="flex items-center justify-center h-full text-text-muted text-sm">No valid JSON to convert</p>
+        )}
+        {tab === 'csharp' && (
+          hasData
+            ? <OutputEditor value={csharpOutput} language="plaintext" />
+            : <p className="flex items-center justify-center h-full text-text-muted text-sm">No valid JSON to convert</p>
         )}
       </div>
     </div>
