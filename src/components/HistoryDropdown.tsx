@@ -1,11 +1,19 @@
 import { useState, useRef, useEffect } from 'react'
-import type { HistoryEntry } from '../hooks/useHistory'
+import type { HistoryEntry } from '../hooks/useStorage'
 
 interface HistoryDropdownProps {
   entries: HistoryEntry[]
-  onRestore: (content: string) => void
+  onRestore: (id: string) => void
   onRemove: (id: string) => void
   onClearAll: () => void
+  onExport: () => void
+  onImport: (file: File) => void
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function formatRelative(ts: number): string {
@@ -16,9 +24,10 @@ function formatRelative(ts: number): string {
   return new Date(ts).toLocaleDateString()
 }
 
-export function HistoryDropdown({ entries, onRestore, onRemove, onClearAll }: HistoryDropdownProps) {
+export function HistoryDropdown({ entries, onRestore, onRemove, onClearAll, onExport, onImport }: HistoryDropdownProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const importInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!open) return
@@ -56,14 +65,39 @@ export function HistoryDropdown({ entries, onRestore, onRemove, onClearAll }: Hi
             <span className="text-xs font-medium text-text-secondary">
               {entries.length === 0 ? 'No history' : `${entries.length} entries`}
             </span>
-            {entries.length > 0 && (
+            <div className="flex items-center gap-2">
+              <input
+                ref={importInputRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) { onImport(f); e.target.value = '' } }}
+              />
               <button
-                onClick={() => { onClearAll(); setOpen(false) }}
-                className="text-xs text-danger hover:text-danger/80 transition-colors"
+                onClick={() => importInputRef.current?.click()}
+                className="text-xs text-text-muted hover:text-text-secondary transition-colors"
+                title="Import history"
               >
-                Clear all
+                Import
               </button>
-            )}
+              {entries.length > 0 && (
+                <>
+                  <button
+                    onClick={onExport}
+                    className="text-xs text-text-muted hover:text-text-secondary transition-colors"
+                    title="Export history"
+                  >
+                    Export
+                  </button>
+                  <button
+                    onClick={() => { onClearAll(); setOpen(false) }}
+                    className="text-xs text-danger hover:text-danger/80 transition-colors"
+                  >
+                    Clear all
+                  </button>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Entries */}
@@ -80,10 +114,21 @@ export function HistoryDropdown({ entries, onRestore, onRemove, onClearAll }: Hi
                 >
                   <button
                     className="flex-1 text-left min-w-0"
-                    onClick={() => { onRestore(entry.content); setOpen(false) }}
+                    onClick={() => { onRestore(entry.id); setOpen(false) }}
+                    disabled={!!entry.tooLarge}
+                    title={entry.tooLarge ? 'Content too large to store' : undefined}
                   >
                     <p className="text-xs text-text-primary font-mono truncate">{entry.preview}</p>
-                    <p className="text-[10px] text-text-muted mt-0.5">{formatRelative(entry.timestamp)}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <p className="text-[10px] text-text-muted">{formatRelative(entry.timestamp)}</p>
+                      <span className="text-[10px] text-text-muted">{formatBytes(entry.sizeBytes)}</span>
+                      {entry.tooLarge && (
+                        <span className="text-[10px] text-warning bg-warning/10 rounded px-1">too large</span>
+                      )}
+                      {entry.encrypted && (
+                        <span className="text-[10px] text-accent bg-accent/10 rounded px-1">🔒</span>
+                      )}
+                    </div>
                   </button>
                   <button
                     onClick={() => onRemove(entry.id)}

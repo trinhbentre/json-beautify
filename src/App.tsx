@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { jsonrepair } from 'jsonrepair'
 import { Header } from './components/Header'
 import { CodeEditor } from './components/CodeEditor'
@@ -11,7 +11,8 @@ import { DiagramView } from './components/DiagramView'
 import { FileDropZone } from './components/FileDropZone'
 import { ParseProgress } from './components/ParseProgress'
 import { JQSearchPanel } from './components/JQSearchPanel'
-import { useHistory } from './hooks/useHistory'
+import { PiiMaskPanel } from './components/PiiMaskPanel'
+import { useStorage } from './hooks/useStorage'
 import * as parserService from './lib/parserService'
 import type { ParseResult } from './lib/parserService'
 
@@ -19,6 +20,7 @@ type Status = 'idle' | 'valid' | 'error'
 type Indent = 2 | 4 | 'tab'
 
 const LARGE_CODE_THRESHOLD = 20 * 1024 * 1024 // 20MB
+const PII_SIZE_LIMIT = 5 * 1024 * 1024 // 5MB
 
 interface JsonError {
   location: string
@@ -106,6 +108,19 @@ export default function App() {
   const [sortKeys, setSortKeys] = useState(false)
   const [viewTab, setViewTab] = useState<'code' | 'tree' | 'table' | 'diagram' | 'convert'>('code')
 
+  // PII panel state
+  const [piiPanelOpen, setPiiPanelOpen] = useState(false)
+
+  // Toast notification
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function showToast(msg: string) {
+    setToast(msg)
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToast(null), 3000)
+  }
+
   // File mode state
   const [fileMode, setFileMode] = useState(false)
   const [fileInfo, setFileInfo] = useState<{ name: string; size: number } | null>(null)
@@ -116,7 +131,22 @@ export default function App() {
   const [parseResult, setParseResult] = useState<ParseResult | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
 
-  const { entries: historyEntries, push: pushHistory, remove: removeHistory, clear: clearHistory } = useHistory()
+  const { history: historyEntries, draft, loading: storageLoading, pushHistory, restoreEntry, deleteEntry, clearHistory, clearDraft, exportHistory, importHistory } = useStorage(
+    !fileMode ? input : ''
+  )
+
+  // Restore draft on mount once storage has loaded and input is empty
+  const draftRestoredRef = useRef(false)
+  useEffect(() => {
+    if (storageLoading) return
+    if (draftRestoredRef.current) return
+    draftRestoredRef.current = true
+    if (draft && !input.trim() && !fileMode) {
+      setInput(draft.content)
+      showToast('Draft restored')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageLoading])
 
   // parsedJson for Tree/Convert — works in both modes
   const parsedJson = useMemo(() => {
@@ -141,7 +171,7 @@ export default function App() {
     setOutput(result)
     setStatus(status)
     setError(error ?? '')
-    if (result) pushHistory(input)
+    if (result) void pushHistory(input)
   }, [input, indent, sortKeys, pushHistory])
 
   const handleMinify = useCallback(() => {
@@ -184,7 +214,8 @@ export default function App() {
     setOutput('')
     setStatus('idle')
     setError('')
-  }, [fileMode])
+    void clearDraft()
+  }, [fileMode, clearDraft])
 
   const handleOpenFile = useCallback(async (file: File) => {
     setFileMode(true)
@@ -274,6 +305,9 @@ export default function App() {
 
   const codeOutput = fileMode ? (fileCodeOutput ?? '') : output
   const canCopy = fileMode ? (fileCodeOutput != null && fileCodeOutput !== '') : !!output
+  const piiDisabled = fileMode
+    ? !parseResult || parseResult.sizeBytes > PII_SIZE_LIMIT
+    : !input.trim()
 
   return (
     <div className="h-screen overflow-hidden flex flex-col bg-surface-900">
@@ -288,7 +322,9 @@ export default function App() {
         repairDisabled={fileMode || !input.trim()}
         onClear={handleClear}
         historyEntries={historyEntries}
-        onRestore={(content) => {
+        onRestore={async (id) => {
+          const content = await restoreEntry(id)
+          if (!content) return
           setFileMode(false)
           setFileInfo(null)
           setParseResult(null)
@@ -298,10 +334,14 @@ export default function App() {
           setStatus('idle')
           setError('')
         }}
-        onRemove={removeHistory}
+        onRemove={deleteEntry}
         onClearHistory={clearHistory}
+        onExportHistory={exportHistory}
+        onImportHistory={importHistory}
         onOpenFile={handleOpenFile}
         onLoadUrl={handleLoadUrl}
+        onPiiMask={() => setPiiPanelOpen(true)}
+        piiDisabled={piiDisabled}
       />
 
       {/* Parse progress bar */}
@@ -425,6 +465,31 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {piiPanelOpen && (
+        <PiiMaskPanel
+          json={parsedJson}
+          onApplyMask={(maskedStr) => {
+            setFileMode(false)
+            setFileInfo(null)
+            setParseResult(null)
+            setParseError(null)
+            setInput(maskedStr)
+            setOutput('')
+            setStatus('idle')
+            setError('')
+            setPiiPanelOpen(false)
+          }}
+          onClose={() => setPiiPanelOpen(false)}
+        />
+      )}
+
+      {/* Toast notification */}
+      {toast && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-surface-700 border border-surface-600 text-text-primary text-xs px-4 py-2 rounded-lg shadow-xl pointer-events-none">
+          {toast}
+        </div>
+      )}
     </div>
   )
 }
