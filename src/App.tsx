@@ -6,6 +6,8 @@ import { OutputEditor } from './components/OutputEditor'
 import { VirtualTextViewer } from './components/VirtualTextViewer'
 import { TreeView } from './components/TreeView'
 import { ConvertPanel } from './components/ConvertPanel'
+import { TableView } from './components/TableView'
+import { DiagramView } from './components/DiagramView'
 import { FileDropZone } from './components/FileDropZone'
 import { ParseProgress } from './components/ParseProgress'
 import { JQSearchPanel } from './components/JQSearchPanel'
@@ -102,7 +104,7 @@ export default function App() {
   const [copied, setCopied] = useState(false)
   const [indent, setIndent] = useState<Indent>(2)
   const [sortKeys, setSortKeys] = useState(false)
-  const [viewTab, setViewTab] = useState<'code' | 'tree' | 'convert'>('code')
+  const [viewTab, setViewTab] = useState<'code' | 'tree' | 'table' | 'diagram' | 'convert'>('code')
 
   // File mode state
   const [fileMode, setFileMode] = useState(false)
@@ -357,7 +359,7 @@ export default function App() {
         <div className="flex flex-col overflow-hidden h-[50vh] lg:h-auto">
           <div className="pane-header">
             <div className="flex gap-0.5 border-r border-surface-700 pr-2 mr-1">
-              {([['code', 'Code'], ['tree', 'Tree'], ['convert', 'Convert']] as const).map(([id, label]) => (
+              {([['code', 'Code'], ['tree', 'Tree'], ['table', 'Table'], ['diagram', 'Diagram'], ['convert', 'Convert']] as const).map(([id, label]) => (
                 <button
                   key={id}
                   onClick={() => setViewTab(id)}
@@ -402,6 +404,16 @@ export default function App() {
                 <div className="shrink-0 border-t border-surface-700 pt-3">
                   <JQSearchPanel data={parsedJson} />
                 </div>
+              </div>
+            )}
+            {viewTab === 'table' && (
+              <div className="h-full overflow-hidden flex flex-col">
+                <TableView data={parsedJson} />
+              </div>
+            )}
+            {viewTab === 'diagram' && (
+              <div className="h-full overflow-hidden flex flex-col">
+                <DiagramView data={parsedJson} />
               </div>
             )}
             {viewTab === 'convert' && (
