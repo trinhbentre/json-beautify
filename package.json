@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@web-tools/ui": "file:./web-tools-ui-1.0.0.tgz",
+    "@web-tools/ui": "github:trinhbentre/web-tools-ui#semver:^1.0.0",
     "@monaco-editor/react": "4.7.0",
     "@streamparser/json": "0.0.22",
     "@tanstack/react-virtual": "3.13.23",
