@@ -1,15 +1,15 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import '@web-tools/ui/styles/base.css';
 
+/* json-beautify uses a compact IDE layout — override shared btn sizes */
 @layer base {
   body {
-    @apply bg-surface-900 text-text-primary antialiased overflow-hidden;
+    overflow: hidden;
     height: 100vh;
   }
 }
 
 @layer components {
+  /* Compact button density for IDE-like tool */
   .btn {
     @apply px-2.5 py-1 rounded text-xs font-medium tracking-wide transition-colors duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed;
   }
@@ -22,6 +22,7 @@
   .btn-danger {
     @apply btn bg-surface-700 hover:bg-danger/20 text-danger border border-surface-600;
   }
+  /* Tool-specific layout components */
   .pane-header {
     @apply flex items-center gap-2 px-3 py-1.5 bg-surface-850 border-b border-surface-700 text-xs h-9 shrink-0;
   }

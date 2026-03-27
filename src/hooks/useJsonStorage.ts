@@ -15,7 +15,7 @@ import type { Draft, HistoryEntry } from '../lib/storageService'
 
 export type { HistoryEntry, Draft }
 
-export function useStorage(content: string) {
+export function useJsonStorage(content: string) {
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [draft, setDraft] = useState<Draft | null>(null)
   const [loading, setLoading] = useState(true)

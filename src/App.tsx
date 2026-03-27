@@ -12,7 +12,7 @@ import { FileDropZone } from './components/FileDropZone'
 import { ParseProgress } from './components/ParseProgress'
 import { JQSearchPanel } from './components/JQSearchPanel'
 import { PiiMaskPanel } from './components/PiiMaskPanel'
-import { useStorage } from './hooks/useStorage'
+import { useJsonStorage } from './hooks/useJsonStorage'
 import * as parserService from './lib/parserService'
 import type { ParseResult } from './lib/parserService'
 
@@ -131,7 +131,7 @@ export default function App() {
   const [parseResult, setParseResult] = useState<ParseResult | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
 
-  const { history: historyEntries, draft, loading: storageLoading, pushHistory, restoreEntry, deleteEntry, clearHistory, clearDraft, exportHistory, importHistory } = useStorage(
+  const { history: historyEntries, draft, loading: storageLoading, pushHistory, restoreEntry, deleteEntry, clearHistory, clearDraft, exportHistory, importHistory } = useJsonStorage(
     !fileMode ? input : ''
   )
 

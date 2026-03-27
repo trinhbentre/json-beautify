@@ -6,7 +6,7 @@ interface VirtualTextViewerProps {
 }
 
 // Simple syntax coloring for JSON using token-based regex
-const TOKEN_RE = /("(?:[^"\\]|\\.)*")|(\btrue\b|\bfalse\b)|(\bnull\b)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|([:,\[\]{}])/g
+const TOKEN_RE = /("(?:[^"\\]|\\.)*")|(\btrue\b|\bfalse\b)|(\bnull\b)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|([:,[\]{}])/g
 
 function colorLine(line: string): React.ReactNode[] {
   const parts: React.ReactNode[] = []

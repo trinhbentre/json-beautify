@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import type { HistoryEntry } from '../hooks/useStorage'
+import type { HistoryEntry } from '../lib/storageService'
 
 interface HistoryDropdownProps {
   entries: HistoryEntry[]
