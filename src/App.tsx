@@ -15,6 +15,7 @@ import { PiiMaskPanel } from './components/PiiMaskPanel'
 import { useJsonStorage } from './hooks/useJsonStorage'
 import * as parserService from './lib/parserService'
 import type { ParseResult } from './lib/parserService'
+import { reformatJSON } from './lib/jsonTextFormat'
 
 type Status = 'idle' | 'valid' | 'error'
 type Indent = 2 | 4 | 'tab'
@@ -49,17 +50,6 @@ function parseJsonError(message: string): JsonError {
   return { location, friendly: message, hint: undefined }
 }
 
-function sortKeysDeep(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeysDeep)
-  if (value !== null && typeof value === 'object') {
-    const sorted: Record<string, unknown> = {}
-    for (const key of Object.keys(value as object).sort()) {
-      sorted[key] = sortKeysDeep((value as Record<string, unknown>)[key])
-    }
-    return sorted
-  }
-  return value
-}
 
 function toIndentArg(indent: Indent): string | number {
   return indent === 'tab' ? '\t' : indent
@@ -72,9 +62,8 @@ function formatJSON(
 ): { result: string; status: Status; error?: string } {
   if (!raw.trim()) return { result: '', status: 'idle' }
   try {
-    let parsed = JSON.parse(raw)
-    if (sort) parsed = sortKeysDeep(parsed)
-    return { result: JSON.stringify(parsed, null, toIndentArg(indent)), status: 'valid' }
+    const result = reformatJSON(raw, { indent: toIndentArg(indent), sort })
+    return { result, status: 'valid' }
   } catch (e) {
     const msg = (e as Error).message
     return { result: '', status: 'error', error: msg }
@@ -84,8 +73,8 @@ function formatJSON(
 function minifyJSON(raw: string): { result: string; status: Status; error?: string } {
   if (!raw.trim()) return { result: '', status: 'idle' }
   try {
-    const parsed = JSON.parse(raw)
-    return { result: JSON.stringify(parsed), status: 'valid' }
+    const result = reformatJSON(raw, { indent: 0, sort: false, minify: true })
+    return { result, status: 'valid' }
   } catch (e) {
     const msg = (e as Error).message
     return { result: '', status: 'error', error: msg }
